@@ -172,6 +172,49 @@ def classify_session(summary: dict, comparison: dict, is_recovering: bool = Fals
     else:
         return "high activity"
 
+def build_session_result(session: Session) -> dict:
+    """Runs the full analysis pipeline on a Session and packages the
+    result as a single structured dictionary."""
+    valid_obs = session.valid_observations
+    total = len(session.observations)
+    usable = len(valid_obs)
+
+    hr_summary = compute_summary(valid_obs, "heart_rate")
+    comparison = compare_to_reference(hr_summary, session.participant)
+    recovering = detect_recovery(valid_obs)
+    classification = classify_session(hr_summary, comparison, recovering)
+
+    return {
+        "participant": session.participant.name,
+        "total_observations": total,
+        "usable_observations": usable,
+        "heart_rate_summary": hr_summary,
+        "comparison": comparison,
+        "is_recovering": recovering,
+        "classification": classification,
+    }
+
+def print_report(result: dict) -> None:
+    """Prints a readable console report from a session result dictionary."""
+    print("=" * 40)
+    print(f"Session Report — {result['participant']}")
+    print("=" * 40)
+    print(f"Observations used: {result['usable_observations']} / {result['total_observations']}")
+
+    hr = result["heart_rate_summary"]
+    if hr["count"] == 0:
+        print("No usable heart rate data.")
+    else:
+        print(f"Heart rate — avg: {hr['average']:.1f}, min: {hr['minimum']}, max: {hr['maximum']}")
+
+    comp = result["comparison"]
+    if "pct_above_resting" in comp:
+        print(f"Compared to resting HR ({comp['resting_hr']}): {comp['pct_above_resting']}% above")
+
+    print(f"Recovering: {result['is_recovering']}")
+    print(f"Classification: {result['classification'].upper()}")
+    print("=" * 40)
+
 
 if __name__ == "__main__":
     p = Participant("Anna", resting_hr=62, max_hr=190, age=27)
@@ -198,15 +241,8 @@ if __name__ == "__main__":
     })
 
     session = Session(p, [obs1, obs2, obs3, obs4])
-
-    hr_summary = compute_summary(session.valid_observations, "heart_rate")
-    comparison = compare_to_reference(hr_summary, session.participant)
-    recovering = detect_recovery(session.valid_observations)
-    classification = classify_session(hr_summary, comparison, recovering)
-
-    print("Heart rate summary:", hr_summary)
-    print("Comparison to reference:", comparison)
-    print("Recovering:", recovering)
-    print("Classification:", classification)
+    result = build_session_result(session)
+    print_report(result)
     
+
     
