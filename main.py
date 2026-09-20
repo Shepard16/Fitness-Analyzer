@@ -156,11 +156,12 @@ def detect_recovery(observations: list, tail_fraction: float = 0.3) -> bool:
     return hr_declining and activity_declining
 
 
-def classify_session(summary: dict, comparison: dict, is_recovering: bool = False) -> str:
+def classify_session(summary: dict, comparison: dict, is_recovering: bool = False, min_observations: int = 2) -> str:
     """Classifies session intensity based on average heart rate compared
     to the participant's resting HR. Thresholds are simplified, fixed
-    percentages applied uniformly across participants."""
-    if summary["count"] == 0:
+    percentages applied uniformly across participants. Requires at least
+    min_observations valid readings to produce a confident classification."""
+    if summary["count"] < min_observations:
         return "insufficient data"
     if is_recovering:
         return "recovering"
@@ -171,6 +172,7 @@ def classify_session(summary: dict, comparison: dict, is_recovering: bool = Fals
         return "moderate activity"
     else:
         return "high activity"
+    
 
 def build_session_result(session: Session) -> dict:
     """Runs the full analysis pipeline on a Session and packages the
@@ -219,30 +221,68 @@ def print_report(result: dict) -> None:
 if __name__ == "__main__":
     p = Participant("Anna", resting_hr=62, max_hr=190, age=27)
 
-    obs1 = Observation.from_dict({
-        "timestamp": 1, "heart_rate": 130, "skin_response": 3.1,
-        "temperature": 33.0, "activity_level": 0.8, "signal_quality": 0.95,
-        "steps": 400
-    })
-    obs2 = Observation.from_dict({
-        "timestamp": 2, "heart_rate": 125, "skin_response": 2.9,
-        "temperature": 32.8, "activity_level": 0.6, "signal_quality": 0.93,
-        "steps": 300
-    })
-    obs3 = Observation.from_dict({
-        "timestamp": 3, "heart_rate": 95, "skin_response": 2.0,
-        "temperature": 32.5, "activity_level": 0.2, "signal_quality": 0.90,
-        "steps": 100
-    })
-    obs4 = Observation.from_dict({
-        "timestamp": 4, "heart_rate": 80, "skin_response": 1.5,
-        "temperature": 32.2, "activity_level": 0.1, "signal_quality": 0.92,
-        "steps": 50
-    })
+    resting_observations = [
+    Observation.from_dict({"timestamp": 1, "heart_rate": 65, "skin_response": 1.2,
+                            "temperature": 32.0, "activity_level": 0.05, "signal_quality": 0.95, "steps": 5}),
+    Observation.from_dict({"timestamp": 2, "heart_rate": 63, "skin_response": 1.1,
+                            "temperature": 32.0, "activity_level": 0.04, "signal_quality": 0.96, "steps": 3}),
+    Observation.from_dict({"timestamp": 3, "heart_rate": 66, "skin_response": 1.3,
+                            "temperature": 32.1, "activity_level": 0.06, "signal_quality": 0.94, "steps": 4}),
+]
+    moderate_observations = [
+    Observation.from_dict({"timestamp": 1, "heart_rate": 90, "skin_response": 2.0,
+                            "temperature": 32.5, "activity_level": 0.4, "signal_quality": 0.93, "steps": 200}),
+    Observation.from_dict({"timestamp": 2, "heart_rate": 92, "skin_response": 2.1,
+                            "temperature": 32.6, "activity_level": 0.42, "signal_quality": 0.92, "steps": 210}),
+    Observation.from_dict({"timestamp": 3, "heart_rate": 88, "skin_response": 2.0,
+                            "temperature": 32.5, "activity_level": 0.39, "signal_quality": 0.94, "steps": 190}),
+]
 
-    session = Session(p, [obs1, obs2, obs3, obs4])
-    result = build_session_result(session)
-    print_report(result)
+    high_observations = [
+    Observation.from_dict({"timestamp": 1, "heart_rate": 150, "skin_response": 3.5,
+                            "temperature": 33.5, "activity_level": 0.9, "signal_quality": 0.96, "steps": 450}),
+    Observation.from_dict({"timestamp": 2, "heart_rate": 155, "skin_response": 3.6,
+                            "temperature": 33.6, "activity_level": 0.92, "signal_quality": 0.95, "steps": 460}),
+    Observation.from_dict({"timestamp": 3, "heart_rate": 152, "skin_response": 3.5,
+                            "temperature": 33.5, "activity_level": 0.91, "signal_quality": 0.97, "steps": 455}),
+]
+
+    recovery_observations = [
+    Observation.from_dict({"timestamp": 1, "heart_rate": 130, "skin_response": 3.1,
+                            "temperature": 33.0, "activity_level": 0.8, "signal_quality": 0.95, "steps": 400}),
+    Observation.from_dict({"timestamp": 2, "heart_rate": 125, "skin_response": 2.9,
+                            "temperature": 32.8, "activity_level": 0.6, "signal_quality": 0.93, "steps": 300}),
+    Observation.from_dict({"timestamp": 3, "heart_rate": 95, "skin_response": 2.0,
+                            "temperature": 32.5, "activity_level": 0.2, "signal_quality": 0.90, "steps": 100}),
+    Observation.from_dict({"timestamp": 4, "heart_rate": 80, "skin_response": 1.5,
+                            "temperature": 32.2, "activity_level": 0.1, "signal_quality": 0.92, "steps": 50}),
+]
+
+    invalid_observations = [
+    Observation.from_dict({"timestamp": 1, "heart_rate": 100, "skin_response": 2.2,
+                            "temperature": 32.4, "activity_level": 0.5, "signal_quality": 0.93, "steps": 250}),
+    Observation.from_dict({"timestamp": 2, "heart_rate": 400, "skin_response": 2.1,
+                            "temperature": 32.5, "activity_level": 0.5, "signal_quality": 0.91, "steps": 200}),  # impossible heart rate
+    Observation.from_dict({"timestamp": 3, "heart_rate": 98, "skin_response": 2.0,
+                            "temperature": 32.3, "activity_level": 0.48, "signal_quality": 0.2, "steps": 240}),  # signal too low
+    Observation.from_dict({"timestamp": 4, "heart_rate": None, "skin_response": 2.0,
+                            "temperature": 32.3, "activity_level": 0.48, "signal_quality": 0.9, "steps": 240}),  # missing field
+]
+
+
+    scenarios = {
+        "Resting": resting_observations,
+        "Moderate activity": moderate_observations,
+        "High activity": high_observations,
+        "Activity followed by recovery": recovery_observations,
+        "Poor-quality / invalid data": invalid_observations,
+    }
+
+    for label, obs_list in scenarios.items():
+        print(f"\n### {label} ###")
+        session = Session(p, obs_list)
+        result = build_session_result(session)
+        print_report(result)
     
 
     
