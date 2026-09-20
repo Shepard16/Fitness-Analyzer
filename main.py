@@ -86,23 +86,127 @@ class Observation:
         def rejection_reason(self) -> str:
                 return self._reason
 
+        
+
+class Session:
+    """Represents a single fitness session, with a collection of observations related to a participant.
+    Composition - A session is composed of multiple observations, it is not kind of either. The session is not a subclass of observation, but rather contains a list of observations as an attribute."""
+
+    def __init__(self, participant: Participant, observations: list = None):
+        self.participant = participant
+        # avoid a mutable default argument (a classic Python pitfall —
+        # a default list would be shared across every Session instance)
+        self._observations = observations if observations is not None else []
+
+    def add_observation(self, observation: Observation):
+        self._observations.append(observation)
+
+    @property
+    def observations(self) -> list:
+        """All observations, valid or not."""
+        return self._observations
+
+    @property
+    def valid_observations(self) -> list:
+        """Only the observations that passed validation."""
+        return [o for o in self._observations if o.is_valid]
+
+
+def compare_to_reference(summary: dict, participant: Participant) -> dict:
+    """Compares a heart-rate summary against the participant's reference
+    values, expressed as a percentage above resting HR."""
+    if summary["average"] is None:
+        return {"comparison": "insufficient data"}
+    avg_hr = summary["average"]
+    pct_above_resting = (avg_hr - participant.resting_hr) / participant.resting_hr * 100
+    return {
+        "avg_heart_rate": avg_hr,
+        "resting_hr": participant.resting_hr,
+        "pct_above_resting": round(pct_above_resting, 1),
+    }
+
+def compute_summary(observations: list, field: str) -> dict:
+    """Calculates average, minimum and maximum for one numeric field
+    across a list of Observations. Returns an empty summary if there's
+    no usable data."""
+    values = [getattr(o, field) for o in observations]
+    if not values:
+        return {"average": None, "minimum": None, "maximum": None, "count": 0}
+    return {
+        "average": sum(values) / len(values),
+        "minimum": min(values),
+        "maximum": max(values),
+        "count": len(values),
+    }
+
+
+def detect_recovery(observations: list, tail_fraction: float = 0.3) -> bool:
+    """Checks whether heart rate and activity level are declining across
+    the last portion of the session (default: final 30% of observations),
+    which suggests the participant is recovering rather than still active."""
+    valid = [o for o in observations if o.is_valid]
+    if len(valid) < 4:  # not enough data to detect a meaningful trend
+        return False
+
+    tail_size = max(2, int(len(valid) * tail_fraction))
+    tail = valid[-tail_size:]
+
+    hr_declining = tail[-1].heart_rate < tail[0].heart_rate
+    activity_declining = tail[-1].activity_level < tail[0].activity_level
+    return hr_declining and activity_declining
+
+
+def classify_session(summary: dict, comparison: dict, is_recovering: bool = False) -> str:
+    """Classifies session intensity based on average heart rate compared
+    to the participant's resting HR. Thresholds are simplified, fixed
+    percentages applied uniformly across participants."""
+    if summary["count"] == 0:
+        return "insufficient data"
+    if is_recovering:
+        return "recovering"
+    pct = comparison["pct_above_resting"]
+    if pct < 15:
+        return "resting"
+    elif pct < 50:
+        return "moderate activity"
+    else:
+        return "high activity"
+
 
 if __name__ == "__main__":
     p = Participant("Anna", resting_hr=62, max_hr=190, age=27)
-    print(p.name, p.resting_hr, p.max_hr)
 
-    obs = Observation.from_dict({
-        "timestamp": 2, "heart_rate": 118, "skin_response": 2.5,
-        "temperature": 32.9, "activity_level": 0.72, "signal_quality": 0.93,
-        "steps": 1500
+    obs1 = Observation.from_dict({
+        "timestamp": 1, "heart_rate": 130, "skin_response": 3.1,
+        "temperature": 33.0, "activity_level": 0.8, "signal_quality": 0.95,
+        "steps": 400
     })
-    print(obs.is_valid, obs.rejection_reason)
+    obs2 = Observation.from_dict({
+        "timestamp": 2, "heart_rate": 125, "skin_response": 2.9,
+        "temperature": 32.8, "activity_level": 0.6, "signal_quality": 0.93,
+        "steps": 300
+    })
+    obs3 = Observation.from_dict({
+        "timestamp": 3, "heart_rate": 95, "skin_response": 2.0,
+        "temperature": 32.5, "activity_level": 0.2, "signal_quality": 0.90,
+        "steps": 100
+    })
+    obs4 = Observation.from_dict({
+        "timestamp": 4, "heart_rate": 80, "skin_response": 1.5,
+        "temperature": 32.2, "activity_level": 0.1, "signal_quality": 0.92,
+        "steps": 50
+    })
 
-    bad_obs = Observation.from_dict({
-        "timestamp": 3, "heart_rate": 400, "skin_response": 2.1,
-        "temperature": 32.5, "activity_level": 0.5, "signal_quality": 0.91,
-        "steps": 1200
-    })
-    print(bad_obs.is_valid, bad_obs.rejection_reason)
-        
-           
+    session = Session(p, [obs1, obs2, obs3, obs4])
+
+    hr_summary = compute_summary(session.valid_observations, "heart_rate")
+    comparison = compare_to_reference(hr_summary, session.participant)
+    recovering = detect_recovery(session.valid_observations)
+    classification = classify_session(hr_summary, comparison, recovering)
+
+    print("Heart rate summary:", hr_summary)
+    print("Comparison to reference:", comparison)
+    print("Recovering:", recovering)
+    print("Classification:", classification)
+    
+    
