@@ -33,10 +33,12 @@ class TestObservation(unittest.TestCase):
 
     def test_missing_field_is_invalid(self):
         obs = Observation.from_dict({
-            "timestamp": 1, "heart_rate": 100, "skin_response": 2.0,
-            "temperature": 32.5, "activity_level": 0.5, "signal_quality": 0.9,
-            # "steps" missing
-        })
+        "timestamp": 1, "heart_rate": 100, "skin_response": 2.0,
+        "activity_level": 0.5, "signal_quality": 0.9,
+        # "temperature" missing
+    })
+        self.assertFalse(obs.is_valid)
+        self.assertEqual(obs.rejection_reason, "Missing required field(s)") 
         self.assertFalse(obs.is_valid)
         self.assertEqual(obs.rejection_reason, "Missing required field(s)")
 

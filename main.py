@@ -28,17 +28,29 @@ class Participant:
             self._resting_hr = self._validate_hr(value)
 
 
+def build_participant_from_profile(profile: dict) -> Participant:
+    """Converts the instructor-supplied generator's profile dict into a
+    Participant. The generator provides baseline_heart_rate but not a max
+    heart rate, so we estimate one with a documented margin above resting HR."""
+    resting_hr = profile["baseline_heart_rate"]
+    estimated_max_hr = min(220, resting_hr + 130)
+    return Participant(
+        name=profile["participant_id"],
+        resting_hr=resting_hr,
+        max_hr=estimated_max_hr,
+    )
+
+
 
 class Observation:
         """A single measurement window taken from a wearable device during a
     session. Validates itself on construction and reports whether it's usable."""
 
-        REQUIRED_FIELDS = ["timestamp", "heart_rate", "skin_response", "steps", "temperature", "activity_level", "signal_quality"]
+        REQUIRED_FIELDS = ["timestamp", "heart_rate", "skin_response", "temperature", "activity_level", "signal_quality"]
 
-        def __init__(self, timestamp, heart_rate, steps, skin_response, temperature, activity_level, signal_quality):
+        def __init__(self, timestamp, heart_rate, skin_response, temperature, activity_level, signal_quality):
                 self.timestamp = timestamp
                 self.heart_rate = heart_rate
-                self.steps = steps
                 self.skin_response = skin_response
                 self.temperature = temperature
                 self.activity_level = activity_level
@@ -51,7 +63,6 @@ class Observation:
                 return cls(
                         timestamp=data.get("timestamp"),
                         heart_rate=data.get("heart_rate"),
-                        steps=data.get("steps"),
                         skin_response=data.get("skin_response"),
                         temperature=data.get("temperature"),
                         activity_level=data.get("activity_level"),
@@ -61,8 +72,7 @@ class Observation:
         def _validate(self) -> tuple[bool, str]:
                 if any(v is None for v in (self.timestamp, self.heart_rate,
                                 self.skin_response, self.temperature,
-                                self.activity_level, self.signal_quality,
-                                self.steps)):
+                                self.activity_level, self.signal_quality,)):
                         return False, "Missing required field(s)"
                 if not (30 <= self.heart_rate <= 220):
                         return False, "heart_rate out of realistic range"
@@ -74,8 +84,6 @@ class Observation:
                         return False, "signal quality too low to trust"
                 if not (15 <= self.temperature <= 45):
                         return False, "temperature out of realistic range"
-                if not (0 <= self.steps <= 10000):
-                        return False, "steps out of realistic range for one observation window"
                 return True, ""
 
         @property
@@ -140,20 +148,31 @@ def compute_summary(observations: list, field: str) -> dict:
     }
 
 
-def detect_recovery(observations: list, tail_fraction: float = 0.3) -> bool:
-    """Checks whether heart rate and activity level are declining across
-    the last portion of the session (default: final 30% of observations),
-    which suggests the participant is recovering rather than still active."""
+def detect_recovery(observations: list, head_fraction: float = 0.25,
+                     tail_fraction: float = 0.3, hr_drop_threshold: float = 10.0) -> bool:
+    """Checks whether heart rate and activity level show a genuine declining
+    trend from the early part of the session to the late part, using group
+    averages (not single points) to avoid false positives from random noise.
+    Requires at least a hr_drop_threshold percentage drop in average heart
+    rate, alongside a drop in average activity level."""
     valid = [o for o in observations if o.is_valid]
-    if len(valid) < 4:  # not enough data to detect a meaningful trend
+    if len(valid) < 4:
         return False
 
+    head_size = max(2, int(len(valid) * head_fraction))
     tail_size = max(2, int(len(valid) * tail_fraction))
+    head = valid[:head_size]
     tail = valid[-tail_size:]
 
-    hr_declining = tail[-1].heart_rate < tail[0].heart_rate
-    activity_declining = tail[-1].activity_level < tail[0].activity_level
-    return hr_declining and activity_declining
+    head_avg_hr = sum(o.heart_rate for o in head) / len(head)
+    tail_avg_hr = sum(o.heart_rate for o in tail) / len(tail)
+    head_avg_activity = sum(o.activity_level for o in head) / len(head)
+    tail_avg_activity = sum(o.activity_level for o in tail) / len(tail)
+
+    hr_drop_pct = (head_avg_hr - tail_avg_hr) / head_avg_hr * 100
+    activity_declining = tail_avg_activity < head_avg_activity
+
+    return hr_drop_pct > hr_drop_threshold and activity_declining
 
 
 def classify_session(summary: dict, comparison: dict, is_recovering: bool = False, min_observations: int = 2) -> str:
@@ -219,25 +238,31 @@ def print_report(result: dict) -> None:
 
 
 if __name__ == "__main__":
-    from sample_data import (
-    get_resting_observations, get_moderate_observations,
-    get_high_observations, get_recovery_observations,
-    get_invalid_observations,
-)
-    p = Participant("Anna", resting_hr=62, max_hr=190, age=27)
+    from data_generator import generate_fitness_data, available_scenarios
 
-    scenarios = {
-        "Resting": get_resting_observations(),
-        "Moderate activity": get_moderate_observations(),
-        "High activity": get_high_observations(),
-        "Activity followed by recovery": get_recovery_observations(),
-        "Poor-quality / invalid data": get_invalid_observations(),
+    print("Available scenarios:", available_scenarios())
+
+    scenario_labels = {
+        "resting": "Resting",
+        "moderate_activity": "Moderate activity",
+        "high_activity": "High activity",
+        "recovery": "Activity followed by recovery",
+        "poor_quality": "Poor-quality / invalid data",
     }
 
-    for label, obs_list in scenarios.items():
-        print(f"\n### {label} ###")
-        session = Session(p, obs_list)
+    for scenario_key, label in scenario_labels.items():
+        profile, raw_observations = generate_fitness_data(
+            participant_id="P001",
+            scenario=scenario_key,
+            seed=42,
+            number_of_windows=12,
+        )
+        participant = build_participant_from_profile(profile)
+        observations = [Observation.from_dict(o) for o in raw_observations]
+        session = Session(participant, observations)
         result = build_session_result(session)
+
+        print(f"\n### {label} ###")
         print_report(result)
 
 
