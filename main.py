@@ -219,63 +219,19 @@ def print_report(result: dict) -> None:
 
 
 if __name__ == "__main__":
+    from sample_data import (
+    get_resting_observations, get_moderate_observations,
+    get_high_observations, get_recovery_observations,
+    get_invalid_observations,
+)
     p = Participant("Anna", resting_hr=62, max_hr=190, age=27)
 
-    resting_observations = [
-    Observation.from_dict({"timestamp": 1, "heart_rate": 65, "skin_response": 1.2,
-                            "temperature": 32.0, "activity_level": 0.05, "signal_quality": 0.95, "steps": 5}),
-    Observation.from_dict({"timestamp": 2, "heart_rate": 63, "skin_response": 1.1,
-                            "temperature": 32.0, "activity_level": 0.04, "signal_quality": 0.96, "steps": 3}),
-    Observation.from_dict({"timestamp": 3, "heart_rate": 66, "skin_response": 1.3,
-                            "temperature": 32.1, "activity_level": 0.06, "signal_quality": 0.94, "steps": 4}),
-]
-    moderate_observations = [
-    Observation.from_dict({"timestamp": 1, "heart_rate": 90, "skin_response": 2.0,
-                            "temperature": 32.5, "activity_level": 0.4, "signal_quality": 0.93, "steps": 200}),
-    Observation.from_dict({"timestamp": 2, "heart_rate": 92, "skin_response": 2.1,
-                            "temperature": 32.6, "activity_level": 0.42, "signal_quality": 0.92, "steps": 210}),
-    Observation.from_dict({"timestamp": 3, "heart_rate": 88, "skin_response": 2.0,
-                            "temperature": 32.5, "activity_level": 0.39, "signal_quality": 0.94, "steps": 190}),
-]
-
-    high_observations = [
-    Observation.from_dict({"timestamp": 1, "heart_rate": 150, "skin_response": 3.5,
-                            "temperature": 33.5, "activity_level": 0.9, "signal_quality": 0.96, "steps": 450}),
-    Observation.from_dict({"timestamp": 2, "heart_rate": 155, "skin_response": 3.6,
-                            "temperature": 33.6, "activity_level": 0.92, "signal_quality": 0.95, "steps": 460}),
-    Observation.from_dict({"timestamp": 3, "heart_rate": 152, "skin_response": 3.5,
-                            "temperature": 33.5, "activity_level": 0.91, "signal_quality": 0.97, "steps": 455}),
-]
-
-    recovery_observations = [
-    Observation.from_dict({"timestamp": 1, "heart_rate": 130, "skin_response": 3.1,
-                            "temperature": 33.0, "activity_level": 0.8, "signal_quality": 0.95, "steps": 400}),
-    Observation.from_dict({"timestamp": 2, "heart_rate": 125, "skin_response": 2.9,
-                            "temperature": 32.8, "activity_level": 0.6, "signal_quality": 0.93, "steps": 300}),
-    Observation.from_dict({"timestamp": 3, "heart_rate": 95, "skin_response": 2.0,
-                            "temperature": 32.5, "activity_level": 0.2, "signal_quality": 0.90, "steps": 100}),
-    Observation.from_dict({"timestamp": 4, "heart_rate": 80, "skin_response": 1.5,
-                            "temperature": 32.2, "activity_level": 0.1, "signal_quality": 0.92, "steps": 50}),
-]
-
-    invalid_observations = [
-    Observation.from_dict({"timestamp": 1, "heart_rate": 100, "skin_response": 2.2,
-                            "temperature": 32.4, "activity_level": 0.5, "signal_quality": 0.93, "steps": 250}),
-    Observation.from_dict({"timestamp": 2, "heart_rate": 400, "skin_response": 2.1,
-                            "temperature": 32.5, "activity_level": 0.5, "signal_quality": 0.91, "steps": 200}),  # impossible heart rate
-    Observation.from_dict({"timestamp": 3, "heart_rate": 98, "skin_response": 2.0,
-                            "temperature": 32.3, "activity_level": 0.48, "signal_quality": 0.2, "steps": 240}),  # signal too low
-    Observation.from_dict({"timestamp": 4, "heart_rate": None, "skin_response": 2.0,
-                            "temperature": 32.3, "activity_level": 0.48, "signal_quality": 0.9, "steps": 240}),  # missing field
-]
-
-
     scenarios = {
-        "Resting": resting_observations,
-        "Moderate activity": moderate_observations,
-        "High activity": high_observations,
-        "Activity followed by recovery": recovery_observations,
-        "Poor-quality / invalid data": invalid_observations,
+        "Resting": get_resting_observations(),
+        "Moderate activity": get_moderate_observations(),
+        "High activity": get_high_observations(),
+        "Activity followed by recovery": get_recovery_observations(),
+        "Poor-quality / invalid data": get_invalid_observations(),
     }
 
     for label, obs_list in scenarios.items():
@@ -283,6 +239,8 @@ if __name__ == "__main__":
         session = Session(p, obs_list)
         result = build_session_result(session)
         print_report(result)
+
+
     
 
     
