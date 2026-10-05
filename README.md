@@ -1,105 +1,72 @@
 # Smart Fitness Session Analyzer
 
-**Course:** Object-Oriented Python — Programming Assignment I
+**Course:** Object-Oriented Python — Programming Assignment II
 **Option:** A — Smart Fitness Session Analyzer
 **Student:** Shepard Cyiza
 **Student number:** 413414
 
 ## What it does
 
-Simulates fitness sessions recorded by a wearable device. It takes a participant's
-baseline heart rate, groups sensor readings into a session, checks each reading is
-valid, compares the session against the participant's baseline, and classifies the
-session as resting, moderate, high activity, or recovering. Bad or missing readings
-get filtered out automatically.
-
-The program uses the instructor-supplied `data_generator.py` (unmodified) to
-generate the participant profile and observations for each scenario.
-
-## Files
-
-- `main.py` – all the classes, calculation functions, and the program entry point.
-- `data_generator.py` – instructor-supplied generator, not modified.
-- `sample_data.py` – some hand-built test scenarios I used earlier while developing.
-  Not used by `main.py` anymore since I switched to the real generator, but kept
-  since some of it overlaps with `tests.py`.
-- `tests.py` – automated tests.
-
-## Classes
-
-- **Participant** – a person and their baseline heart rate values.
-- **Observation** – one sensor reading. Validates itself when created.
-- **Session** – a participant plus a list of observations recorded during training.
-
-The calculations (summaries, comparisons, recovery detection, classification) are
-separate functions instead of class methods, so the classes just hold data and the
-functions do the work on that data.
-
-## Design choices
-
-`Session` is made up of a `Participant` and a list of `Observation`s (composition).
-I didn't use inheritance — every observation has the same shape and rules, so
-subclassing didn't make sense here. Composition fit the relationship better.
-
-`Participant` and `Observation` both keep some internal values protected (`_resting_hr`,
-`_valid`, etc.) and only expose them through properties, so they can't be set to
-invalid values from outside the class.
-
-`Observation.from_dict` is a classmethod that builds an observation from a raw dict.
-`Participant._validate_hr` is a staticmethod since it doesn't need any instance data.
-
-## Assumptions
-
-- The generator's profile only gives a resting heart rate, not a max heart rate,
-  so `build_participant_from_profile()` estimates one as `resting_hr + 130`
-  (capped at 220). Not a real formula, just a rough number so the program has
-  something to compare against.
-- Recovery detection compares the average heart rate/activity of the first ~25%
-  of a session against the last ~30%, instead of just the first and last reading.
-  I originally compared single points, but with randomly generated data that gave
-  false positives from noise, so I switched to averaging groups instead.
-
-## Rules I used for classification
-
-- Under 15% above resting HR → resting
-- 15–50% above → moderate activity
-- Over 50% above → high activity
-- Heart rate/activity clearly dropping near the end of the session → recovering (overrides the above)
-- Fewer than 2 valid readings → insufficient data
+Continues my Assignment I project. The program reads the official CSV files, validates
+every row, analyses each session against the participant's own baseline and saves three
+report files. Bad rows are written to `rejected_records.txt` (file, row, field, reason)
+and the program moves on to the next row.
 
 ## How to run it
 
 ```bash
-git clone https://github.com/Shepard16/Fitness-Analyzer.git
-cd Fitness-Analyzer
-python3 main.py
+python3 main.py --profiles data/participants.csv \
+    --sessions data/fitness_sessions.csv data/fitness_sessions_invalid.csv \
+    --output output
 ```
 
-Only the Python standard library is used, no extra installs needed.
+All arguments are optional and default to the files above. Run the tests with
+`python3 -m unittest -v`. Only the standard library is used.
 
-Run the tests with:
-```bash
-python3 -m unittest tests -v
-```
-
-## Example output
+## Project structure
 
 ```
-### Activity followed by recovery ###
-========================================
-Session Report — P001
-========================================
-Observations used: 12 / 12
-Heart rate — avg: 112.8, min: 86, max: 141
-Compared to resting HR (78.0): 44.7% above
-Recovering: True
-Classification: RECOVERING
-========================================
+main.py                  entry point
+data/                    official CSV files (not modified)
+fitness_analyzer/
+    exceptions.py        InvalidIdentifierError, InvalidRecordError, DataFileError
+    models.py            Participant, Observation, Session, RejectedRecord
+    validation.py        regex patterns, range rules, type conversion
+    loader.py            reads the CSV files
+    analysis.py          summaries, comparison, recovery, classification
+    reports.py           writes the output files
+    cli.py               command-line arguments
+tests/                   unittest tests
 ```
 
-## Limitations
+## Rules
 
-- Classification thresholds are the same for everyone, not adjusted per person.
-- Max heart rate is estimated, not measured, since the generator doesn't provide it.
-- A session can still be classified with only 2-3 valid readings, which isn't a lot
-  of data.
+- IDs are checked with regex: participant `P\d{3}`, session `FIT-\d{4}-\d{3}`.
+- Numbers are checked with ranges, e.g. heart rate 30–220, activity and signal quality 0–1.
+- Rows with missing values, wrong types, unknown participants or the wrong number of
+  values are rejected.
+- **Signal quality:** outside 0–1 → rejected. Below 0.50 → accepted but not used in the
+  analysis, since the reading can't be trusted.
+
+Classification (average heart rate compared with baseline):
+
+- Fewer than 3 usable readings → insufficient data
+- Below −15% → below baseline
+- −15% to 15% → resting
+- 15% to 50% → moderate activity
+- 50% or more → high activity
+- Clear drop from a peak back towards baseline → recovering
+
+## Output
+
+`output/` is created if missing and overwritten on each run:
+`analysis_summary.csv`, `analysis_report.txt` and `rejected_records.txt`.
+
+## Use of AI
+
+I used **Claude** (Anthropic) in this assignment. I meant to use it as a guide like in
+Assignment I, but it ended up writing some of the Assignment II code and the tests.
+The design builds on my Assignment I work (Participant / Observation / Session,
+composition, the classification idea). I set up the project and data, went through the
+code with Claude to understand it, and ran the program and tests. The course has no
+specific AI rules, so I followed OsloMet's guidelines on disclosing AI use.
